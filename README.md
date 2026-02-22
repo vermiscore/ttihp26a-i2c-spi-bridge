@@ -1,42 +1,59 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+[![GDS](../../actions/workflows/gds.yaml/badge.svg)](../../actions/workflows/gds.yaml)
+[![Test](../../actions/workflows/test.yaml/badge.svg)](../../actions/workflows/test.yaml)
+[![Docs](../../actions/workflows/docs.yaml/badge.svg)](../../actions/workflows/docs.yaml)
 
-# Tiny Tapeout Verilog Project Template
+# I2C-to-SPI Bridge — TTIHP26a
 
-- [Read the documentation for project](docs/info.md)
+**Ported from:** [tt10-i2c-spi-bridge](https://github.com/vermiscore/tt10-i2c-spi-bridge) (Tiny Tapeout 10 / Sky130)  
+**Target shuttle:** [TTIHP26a](https://app.tinytapeout.com/shuttles/ttihp26a) — IHP sg13g2 130 nm  
+**Submission deadline:** 2026-03-23
 
-## What is Tiny Tapeout?
+---
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+Implements an **I2C peripheral → SPI master bridge** in synthesisable Verilog.
 
-To learn more and get started, visit https://tinytapeout.com.
+- I2C device address: **0x28**
+- SPI Mode 0, MSB-first, CS active-low
+- SPI clock ≈ 1 MHz (system clock / 10, parameterisable)
+- 8-entry byte FIFO decouples I2C and SPI timing
 
-## Set up your Verilog project
+See [docs/info.md](docs/info.md) for full documentation, pinout and test
+instructions.
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+## Quick start
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
+1. **Use this template** → create `ttihp26a-i2c-spi-bridge` in your GitHub account.
+2. Replace the Verilog source files in `src/` with your versions if you have
+   modifications from the TT10 repo.
+3. The `gds` GitHub Action will automatically synthesise and place-and-route
+   using LibreLane + IHP sg13g2 PDK.
+4. Submit to TTIHP26a via [app.tinytapeout.com](https://app.tinytapeout.com).
 
-## Enable GitHub actions to build the results page
+## Repository structure
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+```
+src/
+  project.v          Top-level TT wrapper
+  i2c_peripheral.v   I2C peripheral state machine
+  spi_master.v       SPI master (Mode 0)
+  bridge_ctrl.v      Bridge controller + FIFO
+test/
+  test.py            cocotb testbench
+  Makefile           cocotb Makefile (Icarus Verilog)
+docs/
+  info.md            Project documentation
+info.yaml            Tiny Tapeout project metadata
+```
 
-## Resources
+## Sky130 → IHP migration summary
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+The RTL required **zero changes** — all modules use standard synthesisable
+Verilog with no PDK-specific primitives.  Only the build system and workflow
+files were updated:
 
-## What next?
-
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+| Item | TT10 (Sky130) | TTIHP26a (IHP) |
+|------|--------------|----------------|
+| PDK | Sky130 | IHP sg13g2 |
+| Flow | OpenLane | LibreLane |
+| GH Action ref | `@sky130` | `@ihp` |
+| `info.yaml` | (same structure) | (same structure) |
