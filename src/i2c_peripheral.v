@@ -29,6 +29,7 @@ module i2c_peripheral #(
     wire scl_stable  = scl_sr[2];
     wire sda_stable  = sda_sr[2];
     wire scl_rising  = (scl_sr[2:1] == 2'b01);
+    wire scl_falling = (scl_sr[2:1] == 2'b10);
     wire sda_falling = (sda_sr[2:1] == 2'b10);
     wire sda_rising  = (sda_sr[2:1] == 2'b01);
 
@@ -46,19 +47,21 @@ module i2c_peripheral #(
     reg [3:0] bit_cnt;
     reg [7:0] shift_reg;
     reg       first_data;
+    reg       scl_seen_high;  // tracks that SCL went high in ACK state
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state        <= S_IDLE;
-            bit_cnt      <= 4'd0;
-            shift_reg    <= 8'd0;
-            rx_byte      <= 8'd0;
-            byte_valid   <= 1'b0;
-            is_addr_byte <= 1'b0;
-            bus_active   <= 1'b0;
-            sda_oe       <= 1'b0;
-            scl_oe       <= 1'b0;
-            first_data   <= 1'b0;
+            state          <= S_IDLE;
+            bit_cnt        <= 4'd0;
+            shift_reg      <= 8'd0;
+            rx_byte        <= 8'd0;
+            byte_valid     <= 1'b0;
+            is_addr_byte   <= 1'b0;
+            bus_active     <= 1'b0;
+            sda_oe         <= 1'b0;
+            scl_oe         <= 1'b0;
+            first_data     <= 1'b0;
+            scl_seen_high  <= 1'b0;
         end else begin
             byte_valid <= 1'b0;
 
@@ -68,45 +71,47 @@ module i2c_peripheral #(
                 sda_oe     <= 1'b0;
                 scl_oe     <= 1'b0;
             end else if (start_det) begin
-                state      <= S_ADDR;
-                bit_cnt    <= 4'd0;
-                shift_reg  <= 8'd0;
-                bus_active <= 1'b1;
-                sda_oe     <= 1'b0;
-                first_data <= 1'b1;
+                state         <= S_ADDR;
+                bit_cnt       <= 4'd0;
+                shift_reg     <= 8'd0;
+                bus_active    <= 1'b1;
+                sda_oe        <= 1'b0;
+                first_data    <= 1'b1;
+                scl_seen_high <= 1'b0;
             end else begin
                 case (state)
                     S_ADDR: begin
                         if (scl_rising) begin
-                            // Shift in current bit
                             shift_reg <= {shift_reg[6:0], sda_stable};
-                            bit_cnt   <= bit_cnt + 1;
                             if (bit_cnt == 4'd7) begin
-                                // Full 8-bit word: [7:1]=addr, [0]=R/W
-                                // Use {shift_reg[6:0], sda_stable} = complete byte
                                 if ({shift_reg[6:0], sda_stable} == {I2C_ADDR, 1'b0}) begin
-                                    state  <= S_ACK;
-                                    sda_oe <= 1'b1;
+                                    state         <= S_ACK;
+                                    sda_oe        <= 1'b1;
+                                    scl_seen_high <= 1'b0;
                                 end else begin
-                                    state  <= S_NACK;
+                                    state <= S_NACK;
                                 end
                                 bit_cnt <= 4'd0;
+                            end else begin
+                                bit_cnt <= bit_cnt + 1;
                             end
                         end
                     end
 
                     S_ACK: begin
-                        if (!scl_stable) begin
-                            sda_oe <= 1'b0;
-                            state  <= S_DATA;
-                            shift_reg <= 8'd0;
+                        if (scl_rising)  scl_seen_high <= 1'b1;
+                        if (scl_falling && scl_seen_high) begin
+                            sda_oe        <= 1'b0;
+                            state         <= S_DATA;
+                            shift_reg     <= 8'd0;
+                            bit_cnt       <= 4'd0;
+                            scl_seen_high <= 1'b0;
                         end
                     end
 
                     S_DATA: begin
                         if (scl_rising) begin
                             shift_reg <= {shift_reg[6:0], sda_stable};
-                            bit_cnt   <= bit_cnt + 1;
                             if (bit_cnt == 4'd7) begin
                                 rx_byte      <= {shift_reg[6:0], sda_stable};
                                 byte_valid   <= 1'b1;
@@ -114,16 +119,22 @@ module i2c_peripheral #(
                                 first_data   <= 1'b0;
                                 state        <= S_DACK;
                                 sda_oe       <= 1'b1;
+                                scl_seen_high <= 1'b0;
                                 bit_cnt      <= 4'd0;
+                            end else begin
+                                bit_cnt <= bit_cnt + 1;
                             end
                         end
                     end
 
                     S_DACK: begin
-                        if (!scl_stable) begin
-                            sda_oe    <= 1'b0;
-                            state     <= S_DATA;
-                            shift_reg <= 8'd0;
+                        if (scl_rising)  scl_seen_high <= 1'b1;
+                        if (scl_falling && scl_seen_high) begin
+                            sda_oe        <= 1'b0;
+                            state         <= S_DATA;
+                            shift_reg     <= 8'd0;
+                            bit_cnt       <= 4'd0;
+                            scl_seen_high <= 1'b0;
                         end
                     end
 
